@@ -2,4 +2,4 @@ wxpython
 pillow
 easyocr
 numpy
-cv2
+opencv-python
