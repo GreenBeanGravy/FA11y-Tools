@@ -20,7 +20,7 @@ BASE_SLOT_COORDS = [
     (1840, 931, 1903, 975)   # Slot 5
 ]
 SLOT_COORDS = (1502, 931, 1565, 975)  # left, top, right, bottom for single slot capture
-IMAGES_FOLDER = "cache"  # Folder for reference images
+IMAGES_FOLDER = "images"  # Folder for reference images
 DISPLAY_SIZE = (250, 250)  # Size for display images
 CONFIDENCE_THRESHOLD = 0.5  # Minimum confidence to consider a match valid
 FPS = 10

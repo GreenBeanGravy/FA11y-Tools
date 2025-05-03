@@ -6,6 +6,8 @@ from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
 from typing import Dict, Tuple, Optional
 import time
+import sys
+import errno
 
 class ImageCache:
     def __init__(self, compression_level: int = 6):
@@ -38,7 +40,7 @@ class ImageCache:
             print(f"Warning: Failed to process {image_path}: {e}")
             return None
 
-    def cache_images(self, image_dir: str = "images", cache_file: str = None, 
+    def cache_images(self, image_dir: str = "cache", cache_file: str = None, 
                     max_workers: int = None) -> Tuple[bool, str]:
         """
         Cache all PNG images from a directory using parallel processing.
@@ -58,13 +60,22 @@ class ImageCache:
         
         try:
             if not os.path.exists(image_dir):
-                os.makedirs(image_dir, exist_ok=True)
+                try:
+                    os.makedirs(image_dir, exist_ok=True)
+                    print(f"Created empty directory '{image_dir}'")
+                except PermissionError as pe:
+                    print(f"Permission error creating directory: {pe}")
+                    return False, f"Error: Permission denied - {str(pe)}"
+                except Exception as e:
+                    print(f"Error creating directory: {e}")
+                    return False, f"Error: {str(e)}"
                 return True, f"Created empty directory '{image_dir}'"
 
             # Get all PNG files
             image_paths = list(Path(image_dir).glob("*.png"))
             
             if not image_paths:
+                print("No PNG files found in directory")
                 return True, "No PNG files found in directory"
 
             # Process images in parallel
@@ -83,8 +94,21 @@ class ImageCache:
                     total_compressed += data['compressed_size']
 
             # Save cache using pickle (faster than JSON for binary data)
-            with open(self.cache_file, 'wb') as f:
-                pickle.dump(self.cache, f, protocol=pickle.HIGHEST_PROTOCOL)
+            try:
+                with open(self.cache_file, 'wb') as f:
+                    pickle.dump(self.cache, f, protocol=pickle.HIGHEST_PROTOCOL)
+            except PermissionError as pe:
+                print(f"Permission error saving cache file: {pe}")
+                return False, f"Error: Permission denied when saving cache - {str(pe)}"
+            except IOError as ioe:
+                if ioe.errno == errno.EACCES:
+                    print(f"Access denied when saving cache: {ioe}")
+                    return False, f"Error: Access denied - {str(ioe)}"
+                print(f"I/O error when saving cache: {ioe}")
+                return False, f"Error: I/O error - {str(ioe)}"
+            except Exception as e:
+                print(f"Error saving cache: {e}")
+                return False, f"Error saving cache: {str(e)}"
 
             elapsed = time.time() - start_time
             compression_ratio = (total_compressed / total_original) * 100 if total_original else 0
@@ -97,6 +121,7 @@ class ImageCache:
             )
 
         except Exception as e:
+            print(f"Unexpected error in cache_images: {e}")
             return False, f"Error: {str(e)}"
 
     def load_cached_image(self, image_name: str) -> Optional[bytes]:
@@ -112,8 +137,15 @@ class ImageCache:
         try:
             if not self.cache:  # Load cache if not already loaded
                 if os.path.exists(self.cache_file):
-                    with open(self.cache_file, 'rb') as f:
-                        self.cache = pickle.load(f)
+                    try:
+                        with open(self.cache_file, 'rb') as f:
+                            self.cache = pickle.load(f)
+                    except PermissionError as pe:
+                        print(f"Permission error loading cache: {pe}")
+                        return None
+                    except Exception as e:
+                        print(f"Error loading cache: {e}")
+                        return None
             
             if image_name in self.cache:
                 return zlib.decompress(self.cache[image_name]['data'])
@@ -127,4 +159,25 @@ class ImageCache:
         """Clear the current cache."""
         self.cache = {}
         if os.path.exists(self.cache_file):
-            os.remove(self.cache_file)
+            try:
+                os.remove(self.cache_file)
+            except PermissionError as pe:
+                print(f"Permission error clearing cache: {pe}")
+            except Exception as e:
+                print(f"Error clearing cache: {e}")
+
+
+# Add this code at the end of the file to make it runnable directly
+if __name__ == "__main__":
+    try:
+        print("Starting ImageCache...")
+        cache = ImageCache()
+        status, message = cache.cache_images(image_dir="cache")
+        print(f"Status: {status}")
+        print(f"Message: {message}")
+        print("Press Enter to exit...")
+        input()  # This prevents the window from closing immediately
+    except Exception as e:
+        print(f"Unhandled exception: {e}")
+        print("Press Enter to exit...")
+        input()  # This ensures we see the error before the window closes
